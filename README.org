@@ -1,0 +1,50 @@
+* Recursive DNS server for Recurse Center
+** Hacking
+run =nix-shell= in the repo root to get a nice environment with necessary haskell packages, in addition to wireshark-cli for packet inspection
+** Emacs
+I recommend [[https://github.com/jyp/dante][dante]] with the following setup in =init.el=
+#+BEGIN_SRC emacs-lisp
+(use-package dante
+  :commands 'dante-mode
+  :init
+  (add-hook 'haskell-mode-hook 'flycheck-mode)
+  (add-hook 'haskell-mode-hook 'dante-mode)
+  ;; Doom
+  (setq dante-load-flags '(;; defaults:
+                           "+c"
+                           "-Wwarn=missing-home-modules"
+                           "-fno-diagnostics-show-caret"
+                           ;; neccessary to make attrap-attrap useful:
+                           "-Wall"
+                           ;; I don't care if you default to Integer
+                           "-Wno-type-defaults"
+                           ;; Overloaded strings can break type inference very often
+                           ;; "-XOverloadedStrings"
+                           "-XQuasiQuotes"
+                           "-XTemplateHaskell"
+                           "-XRankNTypes"
+                           "-XFlexibleContexts"
+                           "-XFlexibleInstances"
+                           "-XGADTs"
+                           "-XTypeApplications"
+                           ;; necessary to make company completion useful:
+                           "-fdefer-typed-holes"
+                           "-fdefer-type-errors"))
+  :config
+  (flycheck-add-next-checker 'haskell-dante '(warning . haskell-hlint))
+  (defun +haskell*restore-modified-state (orig-fn &rest args)
+    "Dante quietly saves the current buffer (without triggering save hooks) before
+invoking flycheck, unexpectedly leaving the buffer in an unmodified state. This
+is annoying if we depend on save hooks to do work on the buffer (like
+reformatting), so we restore a (false) modified state."
+    (let ((modified-p (buffer-modified-p)))
+      (apply orig-fn args)
+      (if modified-p (set-buffer-modified-p t))))
+  (advice-add #'dante-async-load-current-buffer :around #'+haskell*restore-modified-state)
+
+  :bind
+  (:map dante-mode-map
+        ("C-c C-c" . dante-eval-block)))
+#+END_SRC
+** Other editors
+...what are those?
