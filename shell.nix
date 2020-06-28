@@ -33,7 +33,7 @@ let
       pkgs.haskell.lib.addBuildTools drv
       (with pkgs.haskellPackages; [ cabal-install ghcid ghcide hlint hoogle ]);
   };
-  buildInputs = [ pkgs.wireshark-cli ];
+  buildInputs = [ pkgs.wireshark pkgs.dnsutils ];
 
 in pkg.overrideAttrs
 (attrs: { buildInputs = attrs.buildInputs ++ buildInputs; })

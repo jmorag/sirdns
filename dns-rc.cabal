@@ -15,7 +15,9 @@ executable dns-rc
   build-depends:       base >=4.13 && <4.14,
                        rio,
                        conduit,
-                       conduit-extra
+                       conduit-extra,
+                       lens,
+                       network
   default-extensions:  BangPatterns
                      , BinaryLiterals
                      , BlockArguments
