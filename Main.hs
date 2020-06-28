@@ -47,7 +47,12 @@ bytes = lens _bytes (\x y -> x {_bytes = y})
 id :: Lens' DNSQuery Word16
 id = lens getter setter
   where
-
+    getter dnsHeader = let firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) 0
+                           secondByte = fromIntegral $ B.index (dnsHeader ^. bytes) 1
+                       in shiftL firstByte 8 + secondByte
+    setter dnsHeader w = let firstByte = shiftR w 8 & fromIntegral
+                             secondByte = fromIntegral w
+                         in set (bytes . ix 0) firstByte dnsHeader & set (bytes . ix 1) secondByte
 
 qr :: Lens' DNSQuery Bool
 qr = lens getter setter
