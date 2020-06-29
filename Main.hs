@@ -4,20 +4,15 @@ import Control.Lens
 import Data.Bits
 import Network.Socket
 import RIO hiding
-  ( (%~),
-    (.~),
-    ASetter,
+  ( ASetter,
     ASetter',
     Getting,
     Lens,
     Lens',
     SimpleGetter,
     (^.),
-    (^..),
-    (^?),
     lens,
     over,
-    preview,
     set,
     sets,
     to,
@@ -31,13 +26,6 @@ main = P.putStrLn "Hello, Haskell!"
 
 sock :: IO Socket
 sock = socket AF_INET Datagram defaultProtocol
-
--- data DNSQuery = DNSQuery {
---   id :: Word16,
---   qr :: Bool,
---   opCode :: Word8 -- 4 bits
-
--- }
 
 newtype DNSQuery = DNSQuery {_bytes :: ByteString}
 
@@ -54,19 +42,19 @@ bytesLens byte = lens getter setter
                              secondByte = fromIntegral w
                          in set (bytes . ix byte) firstByte dnsHeader & set (bytes . ix (byte + 1)) secondByte
 
-id :: Lens' DNSQuery Bool
+id :: Lens' DNSQuery Word16
 id = bytesLens 0
 
-qdCount :: Lens' DNSQuery Bool
+qdCount :: Lens' DNSQuery Word16
 qdCount = bytesLens 2
 
-anCount :: Lens' DNSQuery Bool
+anCount :: Lens' DNSQuery Word16
 anCount = bytesLens 3
 
-nsCount :: Lens' DNSQuery Bool
+nsCount :: Lens' DNSQuery Word16
 nsCount = bytesLens 4
 
-arCount :: Lens' DNSQuery Bool
+arCount :: Lens' DNSQuery Word16
 arCount = bytesLens 5
 
 bitLens :: Int -> Int -> Lens' DNSQuery Bool
