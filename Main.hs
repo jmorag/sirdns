@@ -32,8 +32,8 @@ newtype DNSQuery = DNSQuery {_bytes :: ByteString}
 bytes :: Lens' DNSQuery ByteString
 bytes = lens _bytes (\x y -> x {_bytes = y})
 
-bytesLens :: Int -> Lens' DNSQuery Word16
-bytesLens byte = lens getter setter
+word16Lens :: Int -> Lens' DNSQuery Word16
+word16Lens byte = lens getter setter
   where
     getter dnsHeader =
       let firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) byte
@@ -46,19 +46,19 @@ bytesLens byte = lens getter setter
 
 
 id :: Lens' DNSQuery Word16
-id = bytesLens 0
+id = word16Lens 0
 
 qdCount :: Lens' DNSQuery Word16
-qdCount = bytesLens 2
+qdCount = word16Lens 2
 
 anCount :: Lens' DNSQuery Word16
-anCount = bytesLens 3
+anCount = word16Lens 3
 
 nsCount :: Lens' DNSQuery Word16
-nsCount = bytesLens 4
+nsCount = word16Lens 4
 
 arCount :: Lens' DNSQuery Word16
-arCount = bytesLens 5
+arCount = word16Lens 5
 
 bitLens :: Int -> Int -> Lens' DNSQuery Bool
 bitLens byte bit = lens getter setter
@@ -120,3 +120,27 @@ setBitSlice word bits len offset =
 assignBit :: Bits a => Bool -> Int -> a -> a
 assignBit True idx word = setBit word idx
 assignBit False idx word = clearBit word idx
+
+newtype QName = QName { unQName :: [ByteString] }
+  deriving (Eq)
+instance Show QName where
+  show (QName strs) = show $ B.intercalate "." strs
+
+qName :: Lens' DNSQuery QName
+qName = lens getter setter
+  where
+    getter dnsQuery = QName $ go 12
+      where
+        go :: Int -> [ByteString]
+        go offset =
+          let len = fromIntegral $ dnsQuery ^?! bytes . ix offset
+           in if len == 0 then [] else B.pack (map (B.index (dnsQuery ^. bytes))
+                      [offset + 1 .. offset + len]) : go (offset + len + 1)
+    setter dnsQuery (QName parts) =
+      let (header, rest) = B.splitAt 12 (dnsQuery^.bytes)
+          qnameBytes = foldr
+            (\part acc -> B.cons (fromIntegral $ B.length part) part <> acc)
+            (B.singleton 0) parts
+          totalLen = B.length qnameBytes
+          rest' = B.drop totalLen rest
+      in DNSQuery $ header <> qnameBytes <> rest'
