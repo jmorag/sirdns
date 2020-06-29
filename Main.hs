@@ -44,22 +44,52 @@ newtype DNSQuery = DNSQuery {_bytes :: ByteString}
 bytes :: Lens' DNSQuery ByteString
 bytes = lens _bytes (\x y -> x {_bytes = y})
 
-id :: Lens' DNSQuery Word16
-id = lens getter setter
+bytesLens :: Int -> Lens' DNSQuery Word16
+bytesLens byte = lens getter setter
   where
-    getter dnsHeader = let firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) 0
-                           secondByte = fromIntegral $ B.index (dnsHeader ^. bytes) 1
+    getter dnsHeader = let firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) byte
+                           secondByte = fromIntegral $ B.index (dnsHeader ^. bytes) (byte + 1)
                        in shiftL firstByte 8 + secondByte
     setter dnsHeader w = let firstByte = shiftR w 8 & fromIntegral
                              secondByte = fromIntegral w
-                         in set (bytes . ix 0) firstByte dnsHeader & set (bytes . ix 1) secondByte
+                         in set (bytes . ix byte) firstByte dnsHeader & set (bytes . ix (byte + 1)) secondByte
 
-qr :: Lens' DNSQuery Bool
-qr = lens getter setter
+id :: Lens' DNSQuery Bool
+id = bytesLens 0
+
+qdCount :: Lens' DNSQuery Bool
+qdCount = bytesLens 2
+
+anCount :: Lens' DNSQuery Bool
+anCount = bytesLens 3
+
+nsCount :: Lens' DNSQuery Bool
+nsCount = bytesLens 4
+
+arCount :: Lens' DNSQuery Bool
+arCount = bytesLens 5
+
+bitLens :: Int -> Int -> Lens' DNSQuery Bool
+bitLens byte bit = lens getter setter
   where
-    getter dnsHeader = B.index (dnsHeader ^. bytes) 2 & \byte -> testBit byte 0
+    getter dnsHeader = B.index (dnsHeader ^. bytes) byte & \byte' -> testBit byte' bit
     setter dnsHeader b =
       over
-        (bytes . ix 2)
-        (\byte -> if b then setBit byte 0 else clearBit byte 0)
+        (bytes . ix byte)
+        (\byte' -> if b then setBit byte' bit else clearBit byte' bit)
         dnsHeader
+
+qr :: Lens' DNSQuery Bool
+qr = bitLens 2 7
+
+aa :: Lens' DNSQuery Bool
+aa = bitLens 2 2
+
+tc :: Lens' DNSQuery Bool
+tc = bitLens 2 1
+
+rd :: Lens' DNSQuery Bool
+rd = bitLens 2 0
+
+ra :: Lens' DNSQuery Bool
+ra = bitLens 3 7
