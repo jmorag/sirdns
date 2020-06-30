@@ -2,6 +2,8 @@ module Main where
 
 import Control.Lens
 import Data.Bits
+import Data.Char
+import Data.String
 import Network.Socket
 import RIO hiding
   ( ASetter,
@@ -12,6 +14,7 @@ import RIO hiding
     SimpleGetter,
     (^.),
     lens,
+    id,
     over,
     set,
     sets,
@@ -19,10 +22,16 @@ import RIO hiding
     view,
   )
 import qualified RIO.ByteString as B
+import qualified RIO.Text as T
 import qualified Prelude as P
 
 main :: IO ()
-main = P.putStrLn "Hello, Haskell!"
+main = do
+  packet <- DNSQuery <$> B.readFile "dns-server-tests/test1/packet"
+  P.print (packet ^. qdCount)
+
+testPacket :: Int -> IO DNSQuery
+testPacket i = DNSQuery <$> B.readFile ("dns-server-tests/test" <> show i <> "/packet")
 
 sock :: IO Socket
 sock = socket AF_INET Datagram defaultProtocol
@@ -32,42 +41,44 @@ newtype DNSQuery = DNSQuery {_bytes :: ByteString}
 bytes :: Lens' DNSQuery ByteString
 bytes = lens _bytes (\x y -> x {_bytes = y})
 
-word16Lens :: Int -> Lens' DNSQuery Word16
-word16Lens byte = lens getter setter
+word16Lens :: [DNSQuery -> Int] -> Lens' DNSQuery Word16
+word16Lens offsets = lens getter setter
   where
     getter dnsHeader =
-      let firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) byte
+      let byte = sum (map ($ dnsHeader) offsets)
+          firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) byte
           secondByte = fromIntegral $ B.index (dnsHeader ^. bytes) (byte + 1)
        in shiftL firstByte 8 + secondByte
     setter dnsHeader w =
-      let firstByte = shiftR w 8 & fromIntegral
+      let byte = sum (map ($ dnsHeader) offsets)
+          firstByte = shiftR w 8 & fromIntegral
           secondByte = fromIntegral w
        in set (bytes . ix byte) firstByte dnsHeader & set (bytes . ix (byte + 1)) secondByte
 
 
 id :: Lens' DNSQuery Word16
-id = word16Lens 0
+id = word16Lens []
 
 qdCount :: Lens' DNSQuery Word16
-qdCount = word16Lens 2
+qdCount = word16Lens [const 4]
 
 anCount :: Lens' DNSQuery Word16
-anCount = word16Lens 3
+anCount = word16Lens [const 6]
 
 nsCount :: Lens' DNSQuery Word16
-nsCount = word16Lens 4
+nsCount = word16Lens [const 8]
 
 arCount :: Lens' DNSQuery Word16
-arCount = word16Lens 5
+arCount = word16Lens [const 10]
 
 bitLens :: Int -> Int -> Lens' DNSQuery Bool
-bitLens byte bit = lens getter setter
+bitLens byte bitIdx = lens getter setter
   where
-    getter dnsHeader = B.index (dnsHeader ^. bytes) byte & \byte' -> testBit byte' bit
+    getter dnsHeader = (dnsHeader ^?! bytes . ix byte) & \byte' -> testBit byte' bitIdx
     setter dnsHeader b =
       over
         (bytes . ix byte)
-        (\byte' -> if b then setBit byte' bit else clearBit byte' bit)
+        (\byte' -> if b then setBit byte' bitIdx else clearBit byte' bitIdx)
         dnsHeader
 
 qr :: Lens' DNSQuery Bool
@@ -121,26 +132,46 @@ assignBit :: Bits a => Bool -> Int -> a -> a
 assignBit True idx word = setBit word idx
 assignBit False idx word = clearBit word idx
 
-newtype QName = QName { unQName :: [ByteString] }
+newtype Name = Name { unName :: [ByteString] }
   deriving (Eq)
-instance Show QName where
-  show (QName strs) = show $ B.intercalate "." strs
+instance Show Name where
+  show (Name strs) = show $ B.intercalate "." strs
+instance IsString Name where
+  fromString s = Name (B.split (fromIntegral (ord '.')) (encodeUtf8 (T.pack s)))
 
-qName :: Lens' DNSQuery QName
+qName :: Lens' DNSQuery Name
 qName = lens getter setter
   where
-    getter dnsQuery = QName $ go 12
+    getter dnsQuery = Name $ go 12
       where
         go :: Int -> [ByteString]
         go offset =
           let len = fromIntegral $ dnsQuery ^?! bytes . ix offset
-           in if len == 0 then [] else B.pack (map (B.index (dnsQuery ^. bytes))
-                      [offset + 1 .. offset + len]) : go (offset + len + 1)
-    setter dnsQuery (QName parts) =
-      let (header, rest) = B.splitAt 12 (dnsQuery^.bytes)
-          qnameBytes = foldr
-            (\part acc -> B.cons (fromIntegral $ B.length part) part <> acc)
-            (B.singleton 0) parts
+           in if len == 0
+                then []
+                else
+                  B.pack
+                    ( map
+                        (B.index (dnsQuery ^. bytes))
+                        [offset + 1 .. offset + len]
+                    )
+                    : go (offset + len + 1)
+    setter dnsQuery (Name q) =
+      let (header, rest) = B.splitAt 12 (dnsQuery ^. bytes)
+          qnameBytes =
+            foldr
+              (\part acc -> B.cons (fromIntegral $ B.length part) part <> acc)
+              (B.singleton 0)
+              q
           totalLen = B.length qnameBytes
           rest' = B.drop totalLen rest
-      in DNSQuery $ header <> qnameBytes <> rest'
+       in DNSQuery $ header <> qnameBytes <> rest'
+
+qNameLen :: Name -> Int
+qNameLen (Name q) = sum (map (P.succ . B.length) q) + 1
+
+qType :: Lens' DNSQuery Word16
+qType = word16Lens [const 12, qNameLen . view qName]
+
+qClass :: Lens' DNSQuery Word16
+qClass = word16Lens [const 12, qNameLen . view qName, const 2]
