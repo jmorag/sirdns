@@ -11,11 +11,13 @@ extra-source-files:  CHANGELOG.md
 
 executable dns-rc
   main-is:             Main.hs
-  -- other-modules:
+  other-modules:       Types
   build-depends:       base >=4.13 && <4.14,
                        rio,
+                       bitvec,
                        conduit,
                        conduit-extra,
+                       iproute,
                        lens,
                        network
   default-extensions:  BangPatterns
