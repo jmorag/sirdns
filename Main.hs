@@ -40,35 +40,37 @@ newtype DNSQuery = DNSQuery {_bytes :: ByteString}
 bytes :: Lens' DNSQuery ByteString
 bytes = lens _bytes (\x y -> x {_bytes = y})
 
-word16Lens :: [DNSQuery -> Int] -> Lens' DNSQuery Word16
+word16Lens :: [DNSQuery -> Int -> Int] -> Lens' DNSQuery Word16
 word16Lens offsets = lens getter setter
   where
     getter dnsHeader =
-      let byte = sum (map ($ dnsHeader) offsets)
+      let byte = foldl' (\acc offset -> acc + offset dnsHeader acc) 0 offsets
           firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) byte
           secondByte = fromIntegral $ B.index (dnsHeader ^. bytes) (byte + 1)
        in shiftL firstByte 8 + secondByte
     setter dnsHeader w =
-      let byte = sum (map ($ dnsHeader) offsets)
+      let byte = foldl' (\acc offset -> acc + offset dnsHeader acc) 0 offsets
           firstByte = shiftR w 8 & fromIntegral
           secondByte = fromIntegral w
        in set (bytes . ix byte) firstByte dnsHeader & set (bytes . ix (byte + 1)) secondByte
 
+constantOffset :: Int -> DNSQuery -> Int -> Int
+constantOffset i _query currentOffset = i + currentOffset
 
 id :: Lens' DNSQuery Word16
 id = word16Lens []
 
 qdCount :: Lens' DNSQuery Word16
-qdCount = word16Lens [const 4]
+qdCount = word16Lens [constantOffset 4]
 
 anCount :: Lens' DNSQuery Word16
-anCount = word16Lens [const 6]
+anCount = word16Lens [constantOffset 6]
 
 nsCount :: Lens' DNSQuery Word16
-nsCount = word16Lens [const 8]
+nsCount = word16Lens [constantOffset 8]
 
 arCount :: Lens' DNSQuery Word16
-arCount = word16Lens [const 10]
+arCount = word16Lens [constantOffset 10]
 
 bitLens :: Int -> Int -> Lens' DNSQuery Bool
 bitLens byte bitIdx = lens getter setter
@@ -138,25 +140,25 @@ instance Show Name where
 instance IsString Name where
   fromString s = Name (B.split (fromIntegral (ord '.')) (encodeUtf8 (T.pack s)))
 
-qName :: Lens' DNSQuery Name
-qName = lens getter setter
+nameLens :: [DNSQuery -> Int -> Int] -> Lens' DNSQuery Name
+nameLens offsets = lens getter setter
   where
-    getter dnsQuery = Name $ go 12
+    getter dnsQuery = Name . go $ foldl' (\acc offset -> acc + offset dnsQuery acc) 0 offsets
       where
         go :: Int -> [ByteString]
         go offset =
-          let len = fromIntegral $ dnsQuery ^?! bytes . ix offset
-           in if len == 0
-                then []
-                else
-                  B.pack
-                    ( map
-                        (B.index (dnsQuery ^. bytes))
-                        [offset + 1 .. offset + len]
-                    )
-                    : go (offset + len + 1)
+          let len' = dnsQuery ^?! bytes . ix offset
+              len = fromIntegral len'
+           in if | shiftR len' 6 == 3 -> go . fromIntegral $ shiftL (len' `mod` 2^5) 8 + (dnsQuery ^?! bytes . ix (offset + 1))
+                 | len == 0 -> []
+                 | otherwise -> B.pack
+                                ( map
+                                    (B.index (dnsQuery ^. bytes))
+                                    [offset + 1 .. offset + len]
+                                )
+                                : go (offset + len + 1)
     setter dnsQuery (Name q) =
-      let (header, rest) = B.splitAt 12 (dnsQuery ^. bytes)
+      let (header, rest) = B.splitAt (foldl' (\acc offset -> acc + offset dnsQuery acc) 0 offsets) (dnsQuery ^. bytes)
           qnameBytes =
             foldr
               (\part acc -> B.cons (fromIntegral $ B.length part) part <> acc)
@@ -166,11 +168,28 @@ qName = lens getter setter
           rest' = B.drop totalLen rest
        in DNSQuery $ header <> qnameBytes <> rest'
 
-qNameLen :: Name -> Int
-qNameLen (Name q) = sum (map (P.succ . B.length) q) + 1
+nameLen :: DNSQuery -> Int -> Int
+nameLen dnsQuery offset =
+  let thisByte = dnsQuery ^?! bytes . ix offset
+  in if | thisByte == 0 -> 1
+        | shiftR thisByte 6 == 3 -> 2
+        | otherwise -> let b = fromIntegral thisByte
+                        in 1 + b + nameLen dnsQuery (offset + b)
+
+qName :: Lens' DNSQuery Name
+qName = nameLens [constantOffset 12]
 
 qType :: Lens' DNSQuery Word16
-qType = word16Lens [const 12, qNameLen . view qName]
+qType = word16Lens [constantOffset 12, nameLen]
 
 qClass :: Lens' DNSQuery Word16
-qClass = word16Lens [const 12, qNameLen . view qName, const 2]
+qClass = word16Lens [constantOffset 12, nameLen, constantOffset 2]
+
+name :: Lens' DNSQuery Name
+name = nameLens [constantOffset 12, nameLen, constantOffset 4]
+
+type' :: Lens' DNSQuery Word16
+type' = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen]
+
+class' :: Lens' DNSQuery Word16
+class' = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 2]
