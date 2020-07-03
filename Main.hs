@@ -13,6 +13,7 @@ import RIO hiding
     Lens',
     SimpleGetter,
     (^.),
+    id,
     lens,
     over,
     set,
@@ -22,12 +23,9 @@ import RIO hiding
   )
 import qualified RIO.ByteString as B
 import qualified RIO.Text as T
-import qualified Prelude as P
 
 main :: IO ()
-main = do
-  packet <- DNSQuery <$> B.readFile "dns-server-tests/test1/packet"
-  P.print (packet ^. qdCount)
+main = pure ()
 
 testPacket :: Int -> IO DNSQuery
 testPacket i = DNSQuery <$> B.readFile ("dns-server-tests/test" <> show i <> "/packet")
@@ -56,14 +54,14 @@ getWord16 :: Int -> DNSQuery -> Word16
 getWord16 offset dns =
   let b1 = fromIntegral $ dns ^?! bytes . ix offset
       b2 = fromIntegral $ dns ^?! bytes . ix (offset + 1)
-  in shiftL b1 8 + b2
+   in shiftL b1 8 + b2
 
 setWord16 :: Int -> DNSQuery -> Word16 -> DNSQuery
 setWord16 offset dns word =
   let b1 = fromIntegral $ shiftR word 8
       b2 = fromIntegral word
-  in dns & bytes . ix offset .~ b1
-         & bytes . ix (offset + 1) .~ b2
+   in dns & bytes . ix offset .~ b1
+          & bytes . ix (offset + 1) .~ b2
 
 word32Lens :: [Offset] -> Lens' DNSQuery Word32
 word32Lens offsets = lens getter setter
@@ -86,9 +84,9 @@ setWord32 offset dns word =
       b3 = fromIntegral $ shiftR word 8 `mod` (2 ^ 7)
       b4 = fromIntegral $ word `mod` (2 ^ 7)
    in dns & bytes . ix offset .~ b1
-        & bytes . ix (offset + 1) .~ b2
-        & bytes . ix (offset + 2) .~ b3
-        & bytes . ix (offset + 3) .~ b4
+          & bytes . ix (offset + 1) .~ b2
+          & bytes . ix (offset + 2) .~ b3
+          & bytes . ix (offset + 3) .~ b4
 
 
 constantOffset :: Int -> Offset
@@ -151,7 +149,6 @@ rCode = lens getter setter
       let setRCode byte = setBitSlice byte code 4 0
        in over (bytes . ix 2) setRCode dnsHeader
 
-
 z :: Lens' DNSQuery Word8
 z = lens getter setter
   where
@@ -180,39 +177,40 @@ instance IsString Name where
 nameLens :: [DNSQuery -> Int -> Int] -> Lens' DNSQuery Name
 nameLens offsets = lens getter setter
   where
-    getter dnsQuery = Name . go $ calculateOffset dnsQuery offsets
-      where
-        go :: Int -> [ByteString]
-        go offset =
-          let len' = dnsQuery ^?! bytes . ix offset
-              len = fromIntegral len'
-           in if  | shiftR len' 6 == 3 ->
-                    go . fromIntegral $
-                      shiftL (len' `mod` 2 ^ 5) 8 + (dnsQuery ^?! bytes . ix (offset + 1))
-                  | len == 0 -> []
-                  | otherwise ->
-                    B.pack (map (B.index (dnsQuery ^. bytes)) [offset + 1 .. offset + len])
-                      : go (offset + len + 1)
+    getter dns = getName (calculateOffset dns offsets) dns
     -- does not handle compression
-    setter dnsQuery (Name q) =
-      let offset = calculateOffset dnsQuery offsets
-          (header, rest) = B.splitAt offset (dnsQuery ^. bytes)
-          qnameBytes =
-            foldr
-              (\part acc -> B.cons (fromIntegral $ B.length part) part <> acc)
-              (B.singleton 0)
-              q
-          totalLen = B.length qnameBytes
-          rest' = B.drop totalLen rest
-       in DNSQuery $ header <> qnameBytes <> rest'
+    setter dns = setName (calculateOffset dns offsets) dns
+
+getName :: Int -> DNSQuery -> Name
+getName off dns = Name (go off)
+  where
+    go offset =
+      let len' = dns ^?! bytes . ix offset
+          len = fromIntegral len'
+       in if  | shiftR len' 6 == 3 ->
+                go . fromIntegral $
+                  shiftL (len' `mod` 2 ^ 5) 8 + (dns ^?! bytes . ix (offset + 1))
+              | len == 0 -> []
+              | otherwise ->
+                B.pack (map (B.index (dns ^. bytes)) [offset + 1 .. offset + len])
+                  : go (offset + len + 1)
+
+setName :: Int -> DNSQuery -> Name -> DNSQuery
+setName offset dns (Name q) =
+  let (header, rest) = B.splitAt offset (dns ^. bytes)
+      qnameBytes = foldr appendPart (B.singleton 0) q
+      appendPart part acc = B.cons (fromIntegral $ B.length part) part <> acc
+      totalLen = B.length qnameBytes
+      rest' = B.drop totalLen rest
+   in DNSQuery $ header <> qnameBytes <> rest'
 
 nameLen :: DNSQuery -> Int -> Int
-nameLen dnsQuery offset =
-  let thisByte = dnsQuery ^?! bytes . ix offset
+nameLen dns offset =
+  let thisByte = dns ^?! bytes . ix offset
   in if | thisByte == 0 -> 1
         | shiftR thisByte 6 == 3 -> 2
         | otherwise -> let b = fromIntegral thisByte
-                        in 1 + b + nameLen dnsQuery (offset + b)
+                        in 1 + b + nameLen dns (offset + b)
 
 qName :: Lens' DNSQuery Name
 qName = nameLens [constantOffset 12]
