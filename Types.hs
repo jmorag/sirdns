@@ -3,6 +3,7 @@ module Types where
 import Control.Lens
 import Data.Bits
 import Data.ByteString.Internal
+import Data.ByteString.Char8 (pack)
 import Data.String
 import RIO hiding
   ( ASetter,
@@ -21,7 +22,6 @@ import RIO hiding
     view,
   )
 import qualified RIO.ByteString as B
-import qualified RIO.Text as T
 
 newtype DNSQuery = DNSQuery {_bytes :: ByteString}
   deriving (Show)
@@ -161,7 +161,7 @@ newtype Name = Name { unName :: [ByteString] }
 instance Show Name where
   show (Name strs) = show $ B.intercalate "." strs
 instance IsString Name where
-  fromString s = Name (B.split (c2w '.') (encodeUtf8 (T.pack s)))
+  fromString s = Name (B.split (c2w '.') (pack s))
 
 nameLens :: [DNSQuery -> Int -> Int] -> Lens' DNSQuery Name
 nameLens offsets = lens getter setter
