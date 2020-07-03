@@ -36,25 +36,31 @@ sock :: IO Socket
 sock = socket AF_INET Datagram defaultProtocol
 
 newtype DNSQuery = DNSQuery {_bytes :: ByteString}
+  deriving (Show)
 
 bytes :: Lens' DNSQuery ByteString
 bytes = lens _bytes (\x y -> x {_bytes = y})
 
-word16Lens :: [DNSQuery -> Int -> Int] -> Lens' DNSQuery Word16
+type Offset = DNSQuery -> Int -> Int
+
+calculateOffset :: DNSQuery -> [Offset] -> Int
+calculateOffset dns = foldl' (\acc offset -> acc + offset dns acc) 0
+
+word16Lens :: [Offset] -> Lens' DNSQuery Word16
 word16Lens offsets = lens getter setter
   where
-    getter dnsHeader =
-      let byte = foldl' (\acc offset -> acc + offset dnsHeader acc) 0 offsets
-          firstByte = fromIntegral $ B.index (dnsHeader ^. bytes) byte
-          secondByte = fromIntegral $ B.index (dnsHeader ^. bytes) (byte + 1)
+    getter dns =
+      let byte = calculateOffset dns offsets
+          firstByte = fromIntegral $ B.index (dns ^. bytes) byte
+          secondByte = fromIntegral $ B.index (dns ^. bytes) (byte + 1)
        in shiftL firstByte 8 + secondByte
-    setter dnsHeader w =
-      let byte = foldl' (\acc offset -> acc + offset dnsHeader acc) 0 offsets
+    setter dns w =
+      let byte = calculateOffset dns offsets
           firstByte = shiftR w 8 & fromIntegral
           secondByte = fromIntegral w
-       in set (bytes . ix byte) firstByte dnsHeader & set (bytes . ix (byte + 1)) secondByte
+       in set (bytes . ix byte) firstByte dns & set (bytes . ix (byte + 1)) secondByte
 
-constantOffset :: Int -> DNSQuery -> Int -> Int
+constantOffset :: Int -> Offset
 constantOffset i _query currentOffset = i + currentOffset
 
 id :: Lens' DNSQuery Word16
@@ -143,22 +149,23 @@ instance IsString Name where
 nameLens :: [DNSQuery -> Int -> Int] -> Lens' DNSQuery Name
 nameLens offsets = lens getter setter
   where
-    getter dnsQuery = Name . go $ foldl' (\acc offset -> acc + offset dnsQuery acc) 0 offsets
+    getter dnsQuery = Name . go $ calculateOffset dnsQuery offsets
       where
         go :: Int -> [ByteString]
         go offset =
           let len' = dnsQuery ^?! bytes . ix offset
               len = fromIntegral len'
-           in if | shiftR len' 6 == 3 -> go . fromIntegral $ shiftL (len' `mod` 2^5) 8 + (dnsQuery ^?! bytes . ix (offset + 1))
-                 | len == 0 -> []
-                 | otherwise -> B.pack
-                                ( map
-                                    (B.index (dnsQuery ^. bytes))
-                                    [offset + 1 .. offset + len]
-                                )
-                                : go (offset + len + 1)
+           in if  | shiftR len' 6 == 3 ->
+                    go . fromIntegral $
+                      shiftL (len' `mod` 2 ^ 5) 8 + (dnsQuery ^?! bytes . ix (offset + 1))
+                  | len == 0 -> []
+                  | otherwise ->
+                    B.pack (map (B.index (dnsQuery ^. bytes)) [offset + 1 .. offset + len])
+                      : go (offset + len + 1)
+    -- does not handle compression
     setter dnsQuery (Name q) =
-      let (header, rest) = B.splitAt (foldl' (\acc offset -> acc + offset dnsQuery acc) 0 offsets) (dnsQuery ^. bytes)
+      let offset = calculateOffset dnsQuery offsets
+          (header, rest) = B.splitAt offset (dnsQuery ^. bytes)
           qnameBytes =
             foldr
               (\part acc -> B.cons (fromIntegral $ B.length part) part <> acc)
@@ -193,3 +200,27 @@ type' = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen]
 
 class' :: Lens' DNSQuery Word16
 class' = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 2]
+
+word32Lens :: [Offset] -> Lens' DNSQuery Word32
+word32Lens offsets = lens getter setter
+  where
+    getter dns =
+      let offset = fromIntegral $ calculateOffset dns offsets
+          b1 = shiftL (dns ^?! bytes . ix offset) 24
+          b2 = shiftL (dns ^?! bytes . ix (offset + 1)) 16
+          b3 = shiftL (dns ^?! bytes . ix (offset + 2)) 8
+          b4 = dns ^?! bytes . ix (offset + 3)
+      in sum (map fromIntegral [b1,b2,b3,b4])
+    setter dns word =
+      let offset = fromIntegral $ calculateOffset dns offsets
+          b1 = fromIntegral $ shiftR word 24
+          b2 = fromIntegral $ shiftR word 16 `mod` (2^7)
+          b3 = fromIntegral $ shiftR word 8 `mod` (2^7)
+          b4 = fromIntegral $ word `mod` (2^7)
+      in dns & bytes . ix offset .~ b1
+             & bytes . ix (offset + 1) .~ b2
+             & bytes . ix (offset + 2) .~ b3
+             & bytes . ix (offset + 3) .~ b4
+
+ttl :: Lens' DNSQuery Word32
+ttl = word32Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 4]
