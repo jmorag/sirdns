@@ -17,6 +17,7 @@ let
             ghc = haskellSuper.ghc // {
               withPackages = haskellSuper.ghc.withHoogle;
             };
+            ghcWithPackages = haskellSelf.ghc.withPackages;
           };
         };
       };

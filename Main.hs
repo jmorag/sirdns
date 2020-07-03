@@ -14,7 +14,6 @@ import RIO hiding
     SimpleGetter,
     (^.),
     lens,
-    id,
     over,
     set,
     sets,
