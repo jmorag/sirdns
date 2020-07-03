@@ -228,26 +228,37 @@ type' :: Lens' DNSQuery Word16
 type' = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen]
 
 class' :: Lens' DNSQuery Word16
-class' = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 2]
+class' =
+  word16Lens
+    [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 2]
 
 ttl :: Lens' DNSQuery Word32
-ttl = word32Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 4]
+ttl =
+  word32Lens
+    [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 4]
 
 rdLength :: Lens' DNSQuery Word16
-rdLength = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 8]
+rdLength =
+  word16Lens
+    [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 8]
 
 data RData = IP Word32 | CName Name
+  deriving (Show)
 
 rData :: Lens' DNSQuery RData
 rData = lens getter setter
-    where
-      offsetList = [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 10]
-      getter dns =
-        let offset = (calculateOffset dns offsetList) in
-          if view type' dns == 1
-          then IP $ getWord32 offset dns
-          else CName $ getName offset dns
-      setter dns rData' =
-        let offset = (calculateOffset dns offsetList) in
-            case rData' of IP ip -> setWord32 offset dns ip & set type' 1
-                           CName cname -> setName offset dns cname & set type' 5
+  where
+    offsetList = [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 10]
+    getter dns =
+      let offset = (calculateOffset dns offsetList)
+       in case view type' dns of
+            0x1 -> IP $ getWord32 offset dns
+            0x5 -> CName $ getName offset dns
+            0x2 -> error "Name server not supported"
+            0xf -> error "Mail server not supported"
+            other -> error $ "RDATA type " <> show other <> " not supported"
+    setter dns rData' =
+      let offset = (calculateOffset dns offsetList)
+       in case rData' of
+            IP ip -> setWord32 offset dns ip & set type' 0x1
+            CName cname -> setName offset dns cname & set type' 0x5
