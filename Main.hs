@@ -232,3 +232,22 @@ class' = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, cons
 
 ttl :: Lens' DNSQuery Word32
 ttl = word32Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 4]
+
+rdLength :: Lens' DNSQuery Word16
+rdLength = word16Lens [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 8]
+
+data RData = IP Word32 | CName Name
+
+rData :: Lens' DNSQuery RData
+rData = lens getter setter
+    where
+      offsetList = [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 10]
+      getter dns =
+        let offset = (calculateOffset dns offsetList) in
+          if view type' dns == 1
+          then IP $ getWord32 offset dns
+          else CName $ getName offset dns
+      setter dns rData' =
+        let offset = (calculateOffset dns offsetList) in
+            case rData' of IP ip -> setWord32 offset dns ip & set type' 1
+                           CName cname -> setName offset dns cname & set type' 5
