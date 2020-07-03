@@ -80,9 +80,9 @@ getWord32 offset dns =
 setWord32 :: Int -> DNSQuery -> Word32 -> DNSQuery
 setWord32 offset dns word =
   let b1 = fromIntegral $ shiftR word 24
-      b2 = fromIntegral $ shiftR word 16 `mod` (2 ^ 7)
-      b3 = fromIntegral $ shiftR word 8 `mod` (2 ^ 7)
-      b4 = fromIntegral $ word `mod` (2 ^ 7)
+      b2 = fromIntegral $ shiftR word 16
+      b3 = fromIntegral $ shiftR word 8
+      b4 = fromIntegral $ word
    in dns & bytes . ix offset .~ b1
           & bytes . ix (offset + 1) .~ b2
           & bytes . ix (offset + 2) .~ b3
