@@ -1,9 +1,26 @@
 module Main where
 
 import Network.Socket
-import RIO
+import Network.Socket.ByteString
+import Control.Lens
+import RIO hiding
+  ( ASetter,
+    ASetter',
+    Getting,
+    Lens,
+    Lens',
+    SimpleGetter,
+    (^.),
+    id,
+    lens,
+    over,
+    set,
+    sets,
+    to,
+    view,
+  )
 import qualified RIO.ByteString as B
-import qualified RIO.Text as T
+import Prelude (print)
 
 import Types
 
@@ -13,5 +30,18 @@ main = pure ()
 testPacket :: Int -> IO DNSQuery
 testPacket i = DNSQuery <$> B.readFile ("dns-server-tests/test" <> show i <> "/packet")
 
-sock :: IO Socket
-sock = socket AF_INET Datagram defaultProtocol
+udpSocket :: IO Socket
+udpSocket = socket AF_INET Datagram defaultProtocol
+
+testOutgoing :: IO (DNSQuery, DNSQuery)
+testOutgoing = do
+  s <- udpSocket
+  let query = mkQuery "google.com"
+  sendAllTo s (query ^. bytes) (SockAddrInet 53 (tupleToHostAddress (199,9,14,201)))
+  (resp, addr) <- recvFrom s 1024
+  close s
+  print addr
+  pure (query, DNSQuery resp)
+
+localhost :: PortNumber -> SockAddr
+localhost port = SockAddrInet port (tupleToHostAddress (127,0,0,1))
