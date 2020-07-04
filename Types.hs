@@ -1,4 +1,36 @@
-module Types where
+module Types
+  ( DNSQuery (DNSQuery),
+    bytes,
+    -- * Header fields
+    id,
+    qr,
+    opCode,
+    aa,
+    tc,
+    rd,
+    ra,
+    z,
+    rCode,
+    qdCount,
+    anCount,
+    nsCount,
+    arCount,
+    -- * Question fields
+    qName,
+    qType,
+    qClass,
+    -- * Answer fields
+    name,
+    type',
+    class',
+    ttl,
+    rdLength,
+    rData,
+    -- * Auxiliary
+    RData (..),
+    mkQuery,
+  )
+where
 
 import Control.Lens
 import Data.Bits
@@ -79,7 +111,7 @@ setWord32 offset dns word =
           & bytes . ix (offset + 3) .~ b4
 
 constantOffset :: Int -> Offset
-constantOffset i _query currentOffset = i + currentOffset
+constantOffset i _ _ = i
 
 id :: Lens' DNSQuery Word16
 id = word16Lens []
@@ -124,11 +156,11 @@ ra = bitLens 3 7
 opCode :: Lens' DNSQuery Word8
 opCode = lens getter setter
   where
-    getter dnsHeader = (dnsHeader ^?! bytes . ix 2)
+    getter dns = (dns ^?! bytes . ix 2)
       & \byte -> shiftR byte 3 `mod` (2 ^ 4)
-    setter dnsHeader code =
+    setter dns code =
       let setOpCode byte = setBitSlice byte code 4 3
-       in over (bytes . ix 2) setOpCode dnsHeader
+       in over (bytes . ix 2) setOpCode dns
 
 rCode :: Lens' DNSQuery Word8
 rCode = lens getter setter
@@ -145,7 +177,7 @@ z = lens getter setter
       & \byte -> shiftR byte 4 `mod` (2 ^ 3)
     setter dnsHeader code =
       let setRCode byte = setBitSlice byte code 3 4
-       in over (bytes . ix 2) setRCode dnsHeader
+       in over (bytes . ix 3) setRCode dnsHeader
 
 setBitSlice :: Word8 -> Word8 -> Int -> Int -> Word8
 setBitSlice word bits len offset =
@@ -189,17 +221,16 @@ setName offset dns (Name q) =
   let (header, rest) = B.splitAt offset (dns ^. bytes)
       qnameBytes = foldr appendPart (B.singleton 0) q
       appendPart part acc = B.cons (fromIntegral $ B.length part) part <> acc
-      totalLen = B.length qnameBytes
-      rest' = B.drop totalLen rest
+      rest' = B.drop (nameLen dns offset) rest
    in DNSQuery $ header <> qnameBytes <> rest'
 
 nameLen :: DNSQuery -> Int -> Int
-nameLen dns offset =
+nameLen !dns !offset =
   let thisByte = dns ^?! bytes . ix offset
   in if | thisByte == 0 -> 1
         | shiftR thisByte 6 == 3 -> 2
         | otherwise -> let b = fromIntegral thisByte
-                        in 1 + b + nameLen dns (offset + b)
+                        in 1 + b + nameLen dns (offset + b + 1)
 
 qName :: Lens' DNSQuery Name
 qName = nameLens [constantOffset 12]
@@ -231,7 +262,7 @@ rdLength =
   word16Lens
     [constantOffset 12, nameLen, constantOffset 4, nameLen, constantOffset 8]
 
-data RData = IP Word32 | CName Name
+data RData = IP Word32 | CName Name | NameServer Name
   deriving (Show)
 
 rData :: Lens' DNSQuery RData
@@ -244,7 +275,7 @@ rData = lens getter setter
        in case view type' dns of
             0x1 -> IP $ getWord32 offset dns
             0x5 -> CName $ getName offset dns
-            0x2 -> error "Name server not supported"
+            0x2 -> NameServer $ getName offset dns
             0xf -> error "Mail server not supported"
             other -> error $ "RDATA type " <> show other <> " not supported"
     setter dns rdata =
@@ -252,3 +283,13 @@ rData = lens getter setter
        in case rdata of
             IP ip -> setWord32 offset dns ip & set type' 0x1
             CName cname -> setName offset dns cname & set type' 0x5
+            NameServer nm -> setName offset dns nm & set type' 0x2
+
+mkQuery :: Name -> DNSQuery
+mkQuery n = DNSQuery (B.replicate 17 0)
+  & id .~ 24382
+  & rd .~ True
+  & qdCount .~ 1
+  & qName .~ n
+  & qType .~ 0x01
+  & qClass .~ 0x01
