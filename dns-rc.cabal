@@ -19,6 +19,8 @@ executable dns-rc
                        conduit-extra,
                        iproute,
                        lens,
+                       megaparsec,
+                       parser-combinators,
                        network
   default-extensions:  BangPatterns
                      , BinaryLiterals

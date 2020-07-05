@@ -28,7 +28,7 @@ makeLenses ''Header
 data CLASS = InternetAddress -- others not supported
   deriving (Show)
 
-data TYPE = A | CNAME
+data TYPE = A | CNAME | NAMESERVER
   deriving (Show)
 
 makePrisms ''TYPE
@@ -48,11 +48,13 @@ data Question
 
 makeLenses ''Question
 
-data RData = ARecord IPv4 | CName Name
+data RData = ARecord IPv4 | CName Name | NameServer Name
   deriving (Show)
 
-data Answer
-  = Answer
+makePrisms ''RData
+
+data Record
+  = Record
       { _name :: !Name,
         _class' :: !CLASS,
         _ttl :: !Word32,
@@ -60,11 +62,14 @@ data Answer
       }
   deriving (Show)
 
+makeLenses ''Record
+
+newtype Answer = Answer { _unAnswer :: [Record] }
+newtype Authority = Authority { _unAuthority :: [Record] }
+newtype Additional = Additional { _unAdditional :: [Record] }
 makeLenses ''Answer
-
-data Authority
-
-data Additional
+makeLenses ''Authority
+makeLenses ''Additional
 
 data Query
   = Query
