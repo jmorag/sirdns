@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Types where
 
 import RIO
@@ -25,15 +26,12 @@ data Header
 
 makeLenses ''Header
 
-data CLASS = InternetAddress -- others not supported
-  deriving (Show)
-
 data TYPE = A | CNAME | NAMESERVER
   deriving (Show)
 
 makePrisms ''TYPE
 
-newtype Name = Name {_labels :: [ByteString]}
+newtype Name = Name { _labels :: [ByteString] }
   deriving (Show)
 
 makeLenses ''Name
@@ -41,8 +39,7 @@ makeLenses ''Name
 data Question
   = Question
       { _qname :: !Name,
-        _qtype :: !TYPE,
-        _qclass :: !CLASS
+        _qtype :: !TYPE
       }
   deriving (Show)
 
@@ -56,7 +53,6 @@ makePrisms ''RData
 data Record
   = Record
       { _name :: !Name,
-        _class' :: !CLASS,
         _ttl :: !Word32,
         _rdata :: !RData
       }
