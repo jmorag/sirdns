@@ -26,7 +26,7 @@ data Header
 
 makeLenses ''Header
 
-data TYPE = A | CNAME | NAMESERVER
+data TYPE = A | CNAME | NAMESERVER | AAAA
   deriving (Show)
 
 makePrisms ''TYPE
@@ -45,7 +45,7 @@ data Question
 
 makeLenses ''Question
 
-data RData = ARecord IPv4 | CName Name | NameServer Name
+data RData = ARecord IPv4 | CName Name | NameServer Name | AAAARecord IPv6
   deriving (Show)
 
 makePrisms ''RData
@@ -60,20 +60,14 @@ data Record
 
 makeLenses ''Record
 
-newtype Answer = Answer { _unAnswer :: [Record] }
-newtype Authority = Authority { _unAuthority :: [Record] }
-newtype Additional = Additional { _unAdditional :: [Record] }
-makeLenses ''Answer
-makeLenses ''Authority
-makeLenses ''Additional
-
 data Query
   = Query
       { _header :: !Header,
-        _question :: !Question,
-        _answer :: !Answer,
-        _authority :: !Authority,
-        _additional :: !Additional
+        _question :: ![Question],
+        _answer :: ![Record],
+        _authority :: ![Record],
+        _additional :: ![Record]
       }
+  deriving (Show)
 
 makeLenses ''Query

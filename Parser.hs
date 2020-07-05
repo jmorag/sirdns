@@ -91,6 +91,7 @@ questionP bytes offset =
       _qtype' = case _qtype of 0x1 -> A;
                                0x2 -> NAMESERVER;
                                0x5 -> CNAME;
+                               28 -> AAAA
                                other -> error $ show other <> " this QTYPE is not supported"
    in case _qclass of 0x1 -> (Question _qname _qtype', o3)
                       other -> error $ show other <> " not supported"
@@ -106,5 +107,24 @@ recordP bytes offset =
                        0x1 -> over _1 (ARecord . toIPv4w) (word32P bytes o5)
                        0x2 -> over _1 NameServer (nameP bytes o5)
                        0x5 -> over _1 CName (nameP bytes o5)
+                       28 -> over _1 (AAAARecord . toIPv6 . map fromIntegral) (n word16P 8 bytes 05)
                        other -> error $ show other <> " this RDATA type is not supported"
   in (Record _name _ttl _rdata, o6)
+
+
+n :: Integral num => Parser a -> num -> Parser [a]
+n parser 0 bytes offset = ([], offset)
+n parser num bytes offset = 
+    let (this, offset') = parser bytes offset
+        (next, offset'') = (n parser (num - 1) bytes offset') in
+      ((this : next), offset'')
+
+queryP :: ByteString -> Query
+queryP bytes =
+  let (_header, o1) = headerP bytes 0
+      (_question, o2) = n questionP (_qdcount _header) bytes o1
+      (_answer, o3) = n recordP (_ancount _header) bytes o2
+      (_authority, o4) = n recordP (_nscount _header) bytes o3
+      (_additional, _) = n recordP (_arcount _header) bytes o4
+  in Query {..}
+

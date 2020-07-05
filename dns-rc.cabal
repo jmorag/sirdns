@@ -23,6 +23,7 @@ executable dns-rc
                        lens,
                        megaparsec,
                        parser-combinators,
+                       pretty-simple,
                        network
   default-extensions:  BangPatterns
                      , BinaryLiterals
