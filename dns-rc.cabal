@@ -11,9 +11,11 @@ extra-source-files:  CHANGELOG.md
 
 executable dns-rc
   main-is:             Main.hs
-  other-modules:       Types
+  other-modules:       Types,
+                       Parser
   build-depends:       base >=4.13 && <4.14,
                        rio,
+                       bytestring,
                        bitvec,
                        conduit,
                        conduit-extra,
