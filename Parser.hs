@@ -34,15 +34,10 @@ instance MonadState Int Parser where
   state = Parser . const
 
 pState :: (MonadState Int m, MonadReader ByteString m) => m (ByteString, Int)
-pState = do
-  bytes <- ask
-  offset <- get
-  pure (bytes, offset)
+pState = liftA2 (,) ask get
 
 byte :: (MonadState Int m, MonadReader ByteString m) => m Word8
-byte = do
-  (bytes, offset) <- pState
-  pure $ B.index bytes offset
+byte = uncurry B.index <$> pState
 
 incr :: (MonadState Int m) => m ()
 incr = modify (+ 1)
