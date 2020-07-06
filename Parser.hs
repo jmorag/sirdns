@@ -83,24 +83,23 @@ rCodeP = fmap (`mod` 16) byte <* incr
 
 nameP :: Parser Name
 nameP = do
-  (nm, Max offset) <- runWriterT go
-  Name nm <$ put offset
+  (nm, w) <- runWriterT go
+  Name nm <$ maybe (pure ()) (put . getFirst) w
   where
-    go :: WriterT (Max Int) Parser [ByteString]
+    go :: WriterT (Maybe (First Int)) Parser [ByteString]
     go = do
       len <- byte
       let len' = fromIntegral len
-      if  | len == 0 -> gets (+ 1) >>= write >> pure []
+      if  | len == 0 -> [] <$ incr
           | shiftR len 6 == 3 -> pState >>= \(bytes, offset) -> do
             let offset' =
                   fromIntegral $
                     shiftL (len `mod` (2 ^ 5)) 8 + B.index bytes (offset + 1)
-            put offset' >> tell (Max (offset + 2)) >> go
+            put offset' >> tell (Just (First (offset + 2))) >> go
           | otherwise -> pState >>= \(bytes, offset) -> do
             let part = B.take len' (B.drop (offset + 1) bytes)
                 offset' = offset + len' + 1
-            write offset' >> fmap (part :) go
-    write x = put x >> tell (Max x)
+            put offset' >> fmap (part :) go
 
 word32P :: Parser Word32
 word32P = do
