@@ -7,6 +7,7 @@ import Data.ByteString.Builder
 import Data.IP
 import RIO hiding (id)
 import qualified RIO.ByteString as B
+import qualified RIO.ByteString.Lazy as BL
 import RIO.ByteString.Lazy (fromChunks)
 import Types
 
@@ -132,7 +133,11 @@ queryP bytes =
 queryToByteString :: Query -> ByteString
 queryToByteString q =
   toStrictBytes . toLazyByteString $
-    mconcat [headerToBuilder (q ^. header)]
+    mconcat [headerToBuilder (q ^. header),
+             foldMap questionToBuilder (q ^. question),
+             foldMap recordToBuilder (q ^. answer),
+             foldMap recordToBuilder (q ^. authority),
+             foldMap recordToBuilder (q ^. additional)]
 
 
 headerToBuilder :: Header -> Builder
@@ -143,9 +148,50 @@ headerToBuilder h =
         shiftL (h ^. opcode) 3 & assignBit (h ^. qr) 7
           & assignBit (h ^. aa) 2
           & assignBit (h ^. tc) 1
-          & assignBit (h ^. rd) 0
+          & assignBit (h ^. rd) 0,
+      word8 $
+        shiftL (h ^. z) 4 + (h ^. rcode) & assignBit (h ^. ra) 7,
+      word16BE (h ^. qdcount),
+      word16BE (h ^. ancount),
+      word16BE (h ^. nscount),
+      word16BE (h ^. arcount)
     ]
 
+nameToBuilder :: Name -> Builder
+nameToBuilder (Name n) =
+  foldMap (\b -> word8 (fromIntegral (B.length b)) <> byteString b) n <> word8 0
+
+qTypeToBuilder :: TYPE -> Builder
+qTypeToBuilder t =
+  word16BE (case t of A -> 1
+                      CNAME -> 5
+                      NAMESERVER -> 2
+                      AAAA -> 28)
+
+questionToBuilder :: Question -> Builder
+questionToBuilder q =
+  nameToBuilder (q ^. qname)
+  <> qTypeToBuilder (q ^. qtype)
+  <> word16BE 1
+
+rDataToBuilder :: RData -> Builder
+rDataToBuilder r =
+  case r of ARecord ip -> word32BE $ fromIPv4w ip
+            CName n -> nameToBuilder n
+            NameServer n -> nameToBuilder n
+            AAAARecord ip -> mconcat $ map (word8 . fromIntegral) (fromIPv6b ip)
+
+recordToBuilder :: Record -> Builder
+recordToBuilder r =
+  nameToBuilder (r ^. name)
+  <> qTypeToBuilder case r ^. rdata of ARecord _ -> A
+                                       CName _ -> CNAME
+                                       NameServer _ -> NAMESERVER
+                                       AAAARecord _ -> AAAA
+  <> word16BE 1
+  <> word32BE (r ^. ttl)
+  <> word16BE (r ^. rdlength)
+  <> rDataToBuilder (r ^. rdata)
 
 assignBit :: Bits a => Bit -> Int -> a -> a
 assignBit (Bit b) ix word = if b then setBit word ix else clearBit word ix
