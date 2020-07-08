@@ -8,6 +8,7 @@ import qualified Hedgehog.Range as Range
 import qualified RIO.ByteString as B
 import Test.Tasty
 import Test.Tasty.Hedgehog (testProperty)
+import Text.Pretty.Simple
 
 import Types
 import Parser
@@ -33,7 +34,7 @@ genHeader = do
   pure $ Header {..}
 
 genName :: Gen Name
-genName = Gen.bytes (Range.linearFrom 0 0 63) & Gen.list Range.linearBounded <&> Name
+genName = Gen.bytes (Range.linearFrom 0 0 63) & Gen.list (Range.linear 0 10) <&> Name
 
 genQuestion :: Gen Question
 genQuestion = do
@@ -41,21 +42,22 @@ genQuestion = do
   _qtype <- Gen.element [A, CNAME, NAMESERVER, AAAA]
   pure $ Question {..}
 
-genIPv4 :: Gen IPv4
-genIPv4 = (Gen.word32 Range.linearBounded) <&> toIPv4w
-
-genIPv6 :: Gen IPv6
-genIPv6 = Gen.int Range.linearBounded & Gen.list (Range.singleton 16) <&> toIPv6
-
 genRecord :: Gen Record
 genRecord = do
   _name <- genName
   _ttl <- Gen.word32 Range.linearBounded
-  _rdata <- Gen.choice [ARecord <$> Gen.enumBounded, CName <$> genName, NameServer <$> genName , AAAARecord <$> Gen.enumBounded]
-  let _rdlength = case _rdata of ARecord _ -> 4
-                                 CName n -> foldl' (\acc b -> acc + fromIntegral (B.length b + 1)) 1 (n ^. labels)
-                                 NameServer n -> foldl' (\acc b -> acc + fromIntegral (B.length b + 1)) 1 (n ^. labels)
-                                 AAAARecord _ -> 16
+  _rdata <-
+    Gen.choice
+      [ ARecord <$> Gen.enumBounded,
+        CName <$> genName,
+        NameServer <$> genName,
+        AAAARecord <$> Gen.enumBounded
+      ]
+  let _rdlength = case _rdata of
+        ARecord _ -> 4
+        CName n -> foldl' (\acc b -> acc + fromIntegral (B.length b + 1)) 1 (n ^. labels)
+        NameServer n -> foldl' (\acc b -> acc + fromIntegral (B.length b + 1)) 1 (n ^. labels)
+        AAAARecord _ -> 16
   pure $ Record {..}
 
 genQuery :: Gen Query
@@ -74,4 +76,4 @@ prop_roundtrip = property $ do
 
 -- To run in ghci
 tests :: IO Bool
-tests = checkParallel $$(discover)
+tests = checkSequential $$(discover)
