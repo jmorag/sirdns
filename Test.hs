@@ -36,7 +36,7 @@ genHeader = do
   pure $ Header {..}
 
 genName :: Gen Name
-genName = Gen.bytes (Range.linearFrom 0 0 63) & Gen.list (Range.linear 0 10) <&> Name
+genName = Gen.bytes (Range.linearFrom 1 1 63) & Gen.list (Range.linear 0 10) <&> Name
 
 genQuestion :: Gen Question
 genQuestion = do

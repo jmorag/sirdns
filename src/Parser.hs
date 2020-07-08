@@ -13,6 +13,8 @@ import RIO.Writer
 import Types
 
 type Parser = ReaderT ByteString (StateT Int (Either Text))
+runParser :: Parser a -> ByteString -> Int -> Either Text a
+runParser p bytes = evalStateT (runReaderT p bytes)
 
 pState :: (MonadState Int m, MonadReader ByteString m) => m (ByteString, Int)
 pState = liftA2 (,) ask get
@@ -20,13 +22,16 @@ pState = liftA2 (,) ask get
 byte :: (MonadState Int m, MonadReader ByteString m) => m Word8
 byte = uncurry B.index <$> pState
 
+byte' :: (MonadState Int m, MonadReader ByteString m, Integral a) => m a
+byte' = fromIntegral <$> byte
+
 incr :: (MonadState Int m) => m ()
 incr = modify (+ 1)
 
 word16P :: Parser Word16
 word16P = do
-  b0 <- fromIntegral <$> byte <* incr
-  b1 <- fromIntegral <$> byte <* incr
+  b0 <- byte' <* incr
+  b1 <- byte' <* incr
   pure $ shiftL b0 8 + b1
 
 qrP :: Parser Bit
@@ -79,11 +84,11 @@ nameP = do
 
 word32P :: Parser Word32
 word32P = do
-  b0 <- flip shiftR 24 <$> byte <* incr
-  b1 <- flip shiftR 16 <$> byte <* incr
-  b2 <- flip shiftR 8 <$> byte <* incr
-  b3 <- byte <* incr
-  pure $ sum (map fromIntegral [b0, b1, b2, b3])
+  b0 <- flip shiftL 24 <$> byte' <* incr
+  b1 <- flip shiftL 16 <$> byte' <* incr
+  b2 <- flip shiftL 8 <$> byte' <* incr
+  b3 <- byte' <* incr
+  pure $ sum [b0, b1, b2, b3]
 
 headerP :: Parser Header
 headerP = do
@@ -142,7 +147,7 @@ queryP = do
     replicateM' = replicateM . fromIntegral
 
 parseQuery :: ByteString -> Either Text Query
-parseQuery bytes = evalStateT (runReaderT queryP bytes) 0
+parseQuery bytes = runParser queryP bytes 0
 
 queryToByteString :: Query -> ByteString
 queryToByteString q =
@@ -194,7 +199,7 @@ rDataToBuilder = \case
   ARecord ip -> word32BE $ fromIPv4w ip
   CName n -> nameToBuilder n
   NameServer n -> nameToBuilder n
-  AAAARecord ip -> mconcat $ map (word8 . fromIntegral) (fromIPv6b ip)
+  AAAARecord ip -> foldMap (word8 . fromIntegral) (fromIPv6b ip)
 
 recordToBuilder :: Record -> Builder
 recordToBuilder r =
