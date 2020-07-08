@@ -12,27 +12,8 @@ import RIO.State
 import RIO.Writer
 import Types
 
-newtype Parser a = Parser {getParser :: ByteString -> Int -> (a, Int)}
-  deriving (Functor)
-
-instance Applicative Parser where
-  pure x = Parser \_ offset -> (x, offset)
-  (Parser f) <*> (Parser x) = Parser \bytes o0 ->
-    let (g, o1) = f bytes o0
-        (y, o2) = x bytes o1
-     in (g y, o2)
-
-instance Monad Parser where
-  (Parser x) >>= f = Parser \bytes o0 ->
-    let (y, o1) = x bytes o0
-     in getParser (f y) bytes o1
-
-instance MonadReader ByteString Parser where
-  ask = Parser \bytes offset -> (bytes, offset)
-  local f (Parser x) = Parser (x . f)
-
-instance MonadState Int Parser where
-  state = Parser . const
+newtype Parser a = Parser {getParser :: ReaderT ByteString (State Int) a}
+  deriving (Functor, Applicative, Monad, MonadReader ByteString, MonadState Int)
 
 pState :: (MonadState Int m, MonadReader ByteString m) => m (ByteString, Int)
 pState = liftA2 (,) ask get
@@ -162,7 +143,7 @@ queryP = do
     replicateM' = replicateM . fromIntegral
 
 parseQuery :: ByteString -> Query
-parseQuery bytes = fst $ getParser queryP bytes 0
+parseQuery bytes = evalState (runReaderT (getParser queryP) bytes) 0
 
 queryToByteString :: Query -> ByteString
 queryToByteString q =
