@@ -1,20 +1,22 @@
 {-# LANGUAGE TemplateHaskell #-}
-import RIO
-import Hedgehog
+
 import Data.Bit
 import Data.IP
+import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+import Parser
+import RIO
+import RIO.Text (unpack)
 import qualified RIO.ByteString as B
 import Test.Tasty
 import Test.Tasty.Hedgehog (testProperty)
 import Text.Pretty.Simple
-
 import Types
-import Parser
 
-main = defaultMain $
-  testGroup "Tests" [testProperty "parse and serialize are inverses" prop_roundtrip]
+main =
+  defaultMain $
+    testGroup "Tests" [testProperty "parse and serialize are inverses" prop_roundtrip]
 
 genHeader :: Gen Header
 genHeader = do
@@ -63,16 +65,19 @@ genRecord = do
 genQuery :: Gen Query
 genQuery = do
   _header <- genHeader
-  _question <- Gen.list (Range.singleton (fromIntegral (_header ^. qdcount))) genQuestion
-  _answer <- Gen.list (Range.singleton (fromIntegral (_header ^. ancount))) genRecord
-  _authority <- Gen.list (Range.singleton (fromIntegral (_header ^. nscount))) genRecord
-  _additional <- Gen.list (Range.singleton (fromIntegral (_header ^. arcount))) genRecord
+  _question <- Gen.list (singleton' (_header ^. qdcount)) genQuestion
+  _answer <- Gen.list (singleton' (_header ^. ancount)) genRecord
+  _authority <- Gen.list (singleton' (_header ^. nscount)) genRecord
+  _additional <- Gen.list (singleton' (_header ^. arcount)) genRecord
   pure $ Query {..}
+  where
+    singleton' = Range.singleton . fromIntegral
+
 
 prop_roundtrip :: Property
 prop_roundtrip = property $ do
   query <- forAll genQuery
-  parseQuery (queryToByteString query) === query
+  tripping query queryToByteString parseQuery
 
 -- To run in ghci
 tests :: IO Bool
