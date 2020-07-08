@@ -74,15 +74,12 @@ library
 
 executable dns-rc
   import: shared
-  main-is:             Main.hs
-  build-depends:       dns-rc
+  main-is: Main.hs
+  build-depends: dns-rc
 
 test-suite test
   import: shared
   main-is: Test.hs
   type: exitcode-stdio-1.0
   build-depends: dns-rc,
-                 hedgehog,
-                 tasty,
-                 tasty-hedgehog
-
+                 hedgehog

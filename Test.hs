@@ -9,14 +9,7 @@ import Parser
 import RIO
 import RIO.Text (unpack)
 import qualified RIO.ByteString as B
-import Test.Tasty
-import Test.Tasty.Hedgehog (testProperty)
-import Text.Pretty.Simple
 import Types
-
-main =
-  defaultMain $
-    testGroup "Tests" [testProperty "parse and serialize are inverses" prop_roundtrip]
 
 genHeader :: Gen Header
 genHeader = do
@@ -81,4 +74,8 @@ prop_roundtrip = property $ do
 
 -- To run in ghci
 tests :: IO Bool
-tests = checkSequential $$(discover)
+tests = checkParallel $$(discover)
+
+main = do
+  t <- tests
+  if t then exitSuccess else exitFailure
