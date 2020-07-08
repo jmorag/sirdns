@@ -110,7 +110,7 @@ recordP bytes offset =
                        0x5 -> over _1 CName (nameP bytes o5)
                        28 -> over _1 (AAAARecord . toIPv6 . map fromIntegral) (n word16P 8 bytes 05)
                        other -> error $ show other <> " this RDATA type is not supported"
-  in (Record _name _ttl _rdata, o6)
+  in (Record _name _ttl _rdlength _rdata, o6)
 
 
 n :: Integral num => Parser a -> num -> Parser [a]

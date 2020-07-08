@@ -54,6 +54,7 @@ data Record
   = Record
       { _name :: !Name,
         _ttl :: !Word32,
+        _rdlength :: !Word16,
         _rdata :: !RData
       }
   deriving (Show)
