@@ -22,17 +22,17 @@ data Header
         _nscount :: !Word16,
         _arcount :: !Word16
       }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makeLenses ''Header
 
 data TYPE = A | CNAME | NAMESERVER | AAAA
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makePrisms ''TYPE
 
 newtype Name = Name { _labels :: [ByteString] }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makeLenses ''Name
 
@@ -41,12 +41,12 @@ data Question
       { _qname :: !Name,
         _qtype :: !TYPE
       }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makeLenses ''Question
 
 data RData = ARecord IPv4 | CName Name | NameServer Name | AAAARecord IPv6
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makePrisms ''RData
 
@@ -57,7 +57,7 @@ data Record
         _rdlength :: !Word16,
         _rdata :: !RData
       }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makeLenses ''Record
 
@@ -69,6 +69,6 @@ data Query
         _authority :: ![Record],
         _additional :: ![Record]
       }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 makeLenses ''Query
