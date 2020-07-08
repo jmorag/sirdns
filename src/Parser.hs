@@ -1,6 +1,6 @@
 module Parser where
 
-import Control.Monad (replicateM)
+import Control.Monad.Except
 import Data.Bit
 import Data.Bits
 import Data.ByteString.Builder
@@ -12,8 +12,7 @@ import RIO.State
 import RIO.Writer
 import Types
 
-newtype Parser a = Parser {getParser :: ReaderT ByteString (State Int) a}
-  deriving (Functor, Applicative, Monad, MonadReader ByteString, MonadState Int)
+type Parser = ReaderT ByteString (StateT Int (Either Text))
 
 pState :: (MonadState Int m, MonadReader ByteString m) => m (ByteString, Int)
 pState = liftA2 (,) ask get
@@ -106,15 +105,15 @@ headerP = do
 questionP :: Parser Question
 questionP = do
   _qname <- nameP
-  _qtype <- word16P <&> \case
-    1 -> A
-    2 -> NAMESERVER
-    5 -> CNAME
-    28 -> AAAA
-    other -> error $ "QTYPE " <> show other <> " not supported"
+  _qtype <- word16P >>= \case
+    1 -> pure A
+    2 -> pure NAMESERVER
+    5 -> pure CNAME
+    28 -> pure AAAA
+    other -> throwError $ "QTYPE " <> tshow other <> " not supported"
   word16P >>= \case
     1 -> pure (Question {..})
-    other -> error $ "QCLASS " <> show other <> " not supported"
+    other -> throwError $ "QCLASS " <> tshow other <> " not supported"
 
 recordP :: Parser Record
 recordP = do
@@ -128,7 +127,7 @@ recordP = do
     2 -> NameServer <$> nameP
     5 -> CName <$> nameP
     28 -> AAAARecord . toIPv6 . map fromIntegral <$> replicateM 8 word16P
-    other -> error $ "RDATA type " <> show other <> " not supported"
+    other -> throwError $ "RDATA type " <> tshow other <> " not supported"
   pure $ Record {..}
 
 queryP :: Parser Query
@@ -142,8 +141,8 @@ queryP = do
   where
     replicateM' = replicateM . fromIntegral
 
-parseQuery :: ByteString -> Query
-parseQuery bytes = evalState (runReaderT (getParser queryP) bytes) 0
+parseQuery :: ByteString -> Either Text Query
+parseQuery bytes = evalStateT (runReaderT queryP bytes) 0
 
 queryToByteString :: Query -> ByteString
 queryToByteString q =
