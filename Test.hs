@@ -72,7 +72,7 @@ genQuery = do
 prop_roundtrip :: Property
 prop_roundtrip = property $ do
   query <- forAll genQuery
-  queryP (queryToByteString query) === query
+  parseQuery (queryToByteString query) === query
 
 -- To run in ghci
 tests :: IO Bool
