@@ -3,10 +3,11 @@ module Parser where
 import Control.Lens (_1)
 import Data.Bit
 import Data.Bits
+import Data.ByteString.Builder
 import Data.IP
-import Text.Megaparsec
 import RIO hiding (id)
 import qualified RIO.ByteString as B
+import RIO.ByteString.Lazy (fromChunks)
 import Types
 
 type Parser a = ByteString -> Int -> (a, Int)
@@ -39,7 +40,7 @@ zP :: Parser Word8
 zP bytes offset = (shiftR (B.index bytes offset) 4 `mod` 8, offset)
 
 rCodeP :: Parser Word8
-rCodeP bytes offset = ((B.index bytes offset) `mod` 16, offset + 1)
+rCodeP bytes offset = (B.index bytes offset `mod` 16, offset + 1)
 
 nameP :: Parser Name
 nameP bytes offset = let (name, offset', ptrOffset) = go offset Nothing
@@ -56,7 +57,7 @@ nameP bytes offset = let (name, offset', ptrOffset) = go offset Nothing
              let offset' = shiftL (len' `mod` (2^5)) 8 + B.index bytes (offset + 1)
              in go (fromIntegral offset') (case ptrOffset of Nothing -> Just (offset + 2); Just o -> Just o)
            | otherwise -> let (next, offset', ptrOffset') = go (offset + 1 + len) ptrOffset in
-             ((B.take len (B.drop (offset + 1) bytes)) : next, offset', ptrOffset')
+             (B.take len (B.drop (offset + 1) bytes) : next, offset', ptrOffset')
 
 word32P :: Parser Word32
 word32P bytes offset = 
@@ -113,11 +114,11 @@ recordP bytes offset =
 
 
 n :: Integral num => Parser a -> num -> Parser [a]
-n parser 0 bytes offset = ([], offset)
+n _ 0 _ offset = ([], offset)
 n parser num bytes offset = 
     let (this, offset') = parser bytes offset
-        (next, offset'') = (n parser (num - 1) bytes offset') in
-      ((this : next), offset'')
+        (next, offset'') = n parser (num - 1) bytes offset' in
+      (this : next, offset'')
 
 queryP :: ByteString -> Query
 queryP bytes =
@@ -128,3 +129,23 @@ queryP bytes =
       (_additional, _) = n recordP (_arcount _header) bytes o4
   in Query {..}
 
+queryToByteString :: Query -> ByteString
+queryToByteString q =
+  toStrictBytes . toLazyByteString $
+    mconcat [headerToBuilder (q ^. header)]
+
+
+headerToBuilder :: Header -> Builder
+headerToBuilder h =
+  mconcat
+    [ word16BE (h ^. id),
+      word8 $
+        shiftL (h ^. opcode) 3 & assignBit (h ^. qr) 7
+          & assignBit (h ^. aa) 2
+          & assignBit (h ^. tc) 1
+          & assignBit (h ^. rd) 0
+    ]
+
+
+assignBit :: Bits a => Bit -> Int -> a -> a
+assignBit (Bit b) ix word = if b then setBit word ix else clearBit word ix
