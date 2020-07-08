@@ -13,8 +13,9 @@ import RIO.Writer
 import Types
 
 type Parser = ReaderT ByteString (StateT Int (Either Text))
+
 runParser :: Parser a -> ByteString -> Int -> Either Text a
-runParser p bytes = evalStateT (runReaderT p bytes)
+runParser p = evalStateT . runReaderT p
 
 pState :: (MonadState Int m, MonadReader ByteString m) => m (ByteString, Int)
 pState = liftA2 (,) ask get
@@ -76,7 +77,9 @@ nameP = do
             let offset' =
                   fromIntegral $
                     shiftL (len `mod` (2 ^ 5)) 8 + B.index bytes (offset + 1)
-            put offset' >> tell (Just (First (offset + 2))) >> go
+            put offset'
+            tell (Just (First (offset + 2)))
+            go
           | otherwise -> pState >>= \(bytes, offset) -> do
             let part = B.take len' (B.drop (offset + 1) bytes)
             put $ offset + len' + 1
