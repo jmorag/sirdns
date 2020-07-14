@@ -74,16 +74,13 @@ nameP = do
       let len' = fromIntegral len
       if  | len == 0 -> [] <$ incr
           | shiftR len 6 == 3 -> pState >>= \(bytes, offset) -> do
-            let offset' =
-                  fromIntegral $
-                    shiftL (len `mod` (2 ^ 5)) 8 + B.index bytes (offset + 1)
-            put offset'
+            let offset' = shiftL (len `mod` (2 ^ 5)) 8 + B.index bytes (offset + 1)
+            put (fromIntegral offset')
             tell (Just (First (offset + 2)))
             go
           | otherwise -> pState >>= \(bytes, offset) -> do
-            let part = B.take len' (B.drop (offset + 1) bytes)
             put $ offset + len' + 1
-            fmap (part :) go
+            fmap (B.take len' (B.drop (offset + 1) bytes) :) go
 
 word32P :: Parser Word32
 word32P = do
