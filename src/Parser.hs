@@ -12,10 +12,10 @@ import RIO.State
 import RIO.Writer
 import Types
 
-type Parser = ReaderT ByteString (StateT Int (Either Text))
+type Parser = ExceptT Text (ReaderT ByteString (State Int))
 
 runParser :: Parser a -> ByteString -> Int -> Either Text a
-runParser p = evalStateT . runReaderT p
+runParser p = evalState . runReaderT (runExceptT p)
 
 pState :: (MonadState Int m, MonadReader ByteString m) => m (ByteString, Int)
 pState = liftA2 (,) ask get

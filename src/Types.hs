@@ -1,10 +1,15 @@
 {-# LANGUAGE TemplateHaskell #-}
+
 module Types where
 
-import RIO
 import Control.Lens (makeLenses, makePrisms)
 import Data.Bit
+import Data.ByteString.Internal (c2w)
+import Data.Default
 import Data.IP
+import RIO
+import qualified RIO.ByteString as B
+import qualified RIO.Text as T
 
 data Header
   = Header
@@ -26,15 +31,36 @@ data Header
 
 makeLenses ''Header
 
+instance Default Header where
+  def =
+    Header
+      { _id = 1337,
+        _qr = 0,
+        _opcode = 0,
+        _aa = 0,
+        _tc = 0,
+        _rd = 1,
+        _ra = 0,
+        _z = 0,
+        _rcode = 0,
+        _qdcount = 1,
+        _ancount = 0,
+        _nscount = 0,
+        _arcount = 0
+      }
+
 data TYPE = A | CNAME | NAMESERVER | AAAA
   deriving (Show, Eq, Generic)
 
 makePrisms ''TYPE
 
-newtype Name = Name { _labels :: [ByteString] }
+newtype Name = Name {_labels :: [ByteString]}
   deriving (Show, Eq, Generic)
 
 makeLenses ''Name
+
+instance IsString Name where
+  fromString = Name . B.split (c2w '.') . encodeUtf8 . T.pack
 
 data Question
   = Question
@@ -72,3 +98,6 @@ data Query
   deriving (Show, Eq, Generic)
 
 makeLenses ''Query
+
+instance Default Query where
+  def = Query def [Question "google.com" A] [] [] []

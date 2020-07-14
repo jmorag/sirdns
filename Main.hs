@@ -1,18 +1,15 @@
 module Main where
 
-import Control.Lens
-import Data.Bit
-import Data.Bits
+import Control.Error
+import Control.Lens (_head)
+import Data.Default
 import Data.IP
 import Network.Socket
 import Network.Socket.ByteString
+import Parser
 import RIO hiding (id)
 import qualified RIO.ByteString as B
-import qualified RIO.Text as T
-import qualified Prelude as P
-
 import Types
-import Parser
 
 main :: IO ()
 main = pure ()
@@ -20,18 +17,13 @@ main = pure ()
 testPacket :: Int -> IO ByteString
 testPacket i = B.readFile ("dns-server-tests/test" <> show i <> "/packet")
 
-sock :: IO Socket
-sock = socket AF_INET Datagram defaultProtocol
+udpSocket :: MonadIO m => m Socket
+udpSocket = liftIO $ socket AF_INET Datagram defaultProtocol
 
-udpSocket :: IO Socket
-udpSocket = socket AF_INET Datagram defaultProtocol
-
-testOutgoing :: IO (ByteString, ByteString)
-testOutgoing = do
+queryServer :: Name -> IPv4 -> ExceptT Text IO Query
+queryServer nm ip = do
   s <- udpSocket
-  query <- testPacket 1
-  sendAllTo s query (SockAddrInet 53 (tupleToHostAddress (199,9,14,201)))
-  (resp, addr) <- recvFrom s 1024
-  close s
-  P.print addr
-  pure (query, resp)
+  let query = queryToByteString (def & question . _head . qname .~ nm)
+  liftIO $ sendAllTo s query (SockAddrInet 53 (toHostAddress ip))
+  response <- timeout (10 ^ 6) (recv s 1024) !? (tshow ip <> " timed out")
+  hoistEither $ parseQuery response

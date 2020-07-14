@@ -64,6 +64,8 @@ common shared
     , base           ^>=4.13
     , bitvec
     , bytestring
+    , data-default
+    , errors
     , iproute
     , lens
     , mtl
