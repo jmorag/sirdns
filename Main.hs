@@ -2,14 +2,34 @@ module Main where
 
 import Algorithm.Search (dfsM)
 import Control.Error
-import Control.Lens (_Just, _head, lastOf, traversed)
+import Control.Lens
 import Data.Default
 import Data.Foldable (find)
 import Data.IP
 import Network.Socket
 import Network.Socket.ByteString
 import Parser
-import RIO hiding (id)
+import RIO hiding
+  ( (%~),
+    (.~),
+    ASetter,
+    ASetter',
+    Getting,
+    Lens,
+    Lens',
+    SimpleGetter,
+    (^.),
+    (^..),
+    (^?),
+    id,
+    lens,
+    over,
+    preview,
+    set,
+    sets,
+    to,
+    view,
+  )
 import qualified RIO.ByteString as B
 import System.Environment (getArgs)
 import Text.Pretty.Simple
