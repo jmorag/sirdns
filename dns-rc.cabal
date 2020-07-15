@@ -64,6 +64,7 @@ common shared
     , base           ^>=4.13
     , bitvec
     , bytestring
+    , containers
     , data-default
     , errors
     , iproute
