@@ -1,20 +1,20 @@
 module Main where
 
+import Algorithm.Search (dfsM)
 import Control.Error
-import Control.Lens (_head, (.~), _Just, (^?), (^..), traversed)
+import Control.Lens (_Just, _head, lastOf, traversed)
 import Data.Default
 import Data.Foldable (find)
 import Data.IP
-import Data.Tree
 import Network.Socket
 import Network.Socket.ByteString
 import Parser
 import RIO hiding (id)
 import qualified RIO.ByteString as B
-import Types
 import System.Environment (getArgs)
-import Prelude (putStrLn)
 import Text.Pretty.Simple
+import Types
+import Prelude (putStrLn)
 
 main :: IO ()
 main = do
@@ -36,23 +36,17 @@ queryServer nm ip = do
   response <- timeout (10 ^ 6) (recv s 1024) !? (tshow ip <> " timed out")
   hoistEither $ parseQuery response
 
-genTree :: Name -> IO (Tree Query)
-genTree nm = unfoldTreeM go "199.9.14.201" where
-  go :: IPv4 -> IO (Query, [IPv4])
-  go ip = do
-    query <- runExceptT (queryServer nm ip)
-    case query of
-      Left err -> error (show err)
-      Right q -> pure (q, q ^.. additional . traversed . rdata . _ARecord)
-
-findIP :: Tree Query -> Maybe IPv4
-findIP tree =
-  let query = find (\q -> q ^. header . aa == 1) tree in
-    query ^? _Just . answer . _head . rdata . _ARecord
-
-findAddr :: Name -> IO IPv4
+findAddr :: Name -> IO (Maybe IPv4)
 findAddr nm = do
-  tree <- genTree nm
-  putStrLn (drawTree (fmap show tree))
-  let (Just ip) = findIP tree
-  pure ip
+  Right initial <- runExceptT $ queryServer nm "199.9.14.201"
+  path <- dfsM nextStates done initial
+  pure $ lastOf (_Just . traversed . answer . traversed . rdata . _ARecord) path
+  where
+    nextStates :: Query -> IO [Query]
+    nextStates q =
+      rights
+        <$> traverse
+          (runExceptT . queryServer nm)
+          (q ^.. records . rdata . _ARecord)
+    done :: Query -> IO Bool
+    done q = pure $ q ^. header . aa == 1

@@ -1,8 +1,9 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Types where
 
-import Control.Lens (makeLenses, makePrisms)
+import Control.Lens (Traversal', makeLenses, makePrisms)
 import Data.Bit
 import Data.ByteString.Internal (c2w)
 import Data.Default
@@ -27,7 +28,7 @@ data Header
         _nscount :: !Word16,
         _arcount :: !Word16
       }
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 makeLenses ''Header
 
@@ -50,12 +51,12 @@ instance Default Header where
       }
 
 data TYPE = A | CNAME | NAMESERVER | AAAA
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 makePrisms ''TYPE
 
 newtype Name = Name {_labels :: [ByteString]}
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 makeLenses ''Name
 
@@ -67,12 +68,12 @@ data Question
       { _qname :: !Name,
         _qtype :: !TYPE
       }
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 makeLenses ''Question
 
 data RData = ARecord IPv4 | CName Name | NameServer Name | AAAARecord IPv6
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 makePrisms ''RData
 
@@ -83,7 +84,7 @@ data Record
         _rdlength :: !Word16,
         _rdata :: !RData
       }
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 makeLenses ''Record
 
@@ -95,9 +96,16 @@ data Query
         _authority :: ![Record],
         _additional :: ![Record]
       }
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Ord, Generic)
 
 makeLenses ''Query
 
 instance Default Query where
   def = Query def [Question "google.com" A] [] [] []
+
+records :: Applicative f => (Record -> f Record) -> Query -> f Query
+records f q = do
+  answer' <- traverse f (_answer q)
+  authority' <- traverse f (_authority q)
+  additional' <- traverse f (_additional q)
+  pure $ q {_answer = answer', _authority = authority', _additional = additional'}

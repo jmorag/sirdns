@@ -61,7 +61,7 @@ common shared
 
   default-language:   Haskell2010
   build-depends:
-    , base           ^>=4.13
+    , base               ^>=4.13
     , bitvec
     , bytestring
     , containers
@@ -73,6 +73,7 @@ common shared
     , network
     , pretty-simple
     , rio
+    , search-algorithms
 
 library
   import:          shared
