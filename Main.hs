@@ -48,8 +48,8 @@ testPacket i = B.readFile ("dns-server-tests/test" <> show i <> "/packet")
 udpSocket :: MonadIO m => m Socket
 udpSocket = liftIO $ socket AF_INET Datagram defaultProtocol
 
-queryServer :: Name -> IPv4 -> ExceptT Text IO Query
-queryServer nm ip = do
+queryServer :: Name -> IPv4 -> IO (Either Text Query)
+queryServer nm ip = runExceptT do
   s <- udpSocket
   let query = queryToByteString (def & question . _head . qname .~ nm)
   liftIO $ sendAllTo s query (SockAddrInet 53 (toHostAddress ip))
@@ -58,15 +58,12 @@ queryServer nm ip = do
 
 findAddr :: Name -> IO (Maybe IPv4)
 findAddr nm = do
-  Right initial <- runExceptT $ queryServer nm "199.9.14.201"
+  Right initial <- queryServer nm "199.9.14.201"
   path <- dfsM nextStates done initial
   pure $ lastOf (_Just . traversed . answer . traversed . rdata . _ARecord) path
   where
     nextStates :: Query -> IO [Query]
     nextStates q =
-      rights
-        <$> traverse
-          (runExceptT . queryServer nm)
-          (q ^.. records . rdata . _ARecord)
+      rights <$> traverse (queryServer nm) (q ^.. records . rdata . _ARecord)
     done :: Query -> IO Bool
     done q = pure $ q ^. header . aa == 1
