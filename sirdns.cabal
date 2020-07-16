@@ -1,7 +1,7 @@
 cabal-version:      3.0
-name:               dns-rc
+name:               sirdns
 version:            0.1.0.0
-synopsis:           Recursive dns server for hackathon
+synopsis:           sirdns is (a) recursive domain name server
 license-file:       LICENSE
 author:             'Lauren Arnett, Joseph Morag'
 maintainer:         jm@josephmorag.com
@@ -83,15 +83,15 @@ library
 
   hs-source-dirs:  src
 
-executable dns-rc
+executable sirdns
   import:        shared
   main-is:       Main.hs
-  build-depends: dns-rc
+  build-depends: sirdns
 
 test-suite test
   import:        shared
   main-is:       Test.hs
   type:          exitcode-stdio-1.0
   build-depends:
-    , dns-rc
     , hedgehog
+    , sirdns
